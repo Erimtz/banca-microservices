@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: cuenta-service
+
+server:
+  port: 8082
+
+# Configuración del microservicio remoto que consume este servicio.
+# En Docker lo sobrescribe docker-compose.yml con http://cliente-service:8081
+servicio:
+  nombre: cuenta-service
+  clientes:
+    base-url: http://localhost:8081
+    timeout-ms: 3000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    co.edu.poli.banca: INFO

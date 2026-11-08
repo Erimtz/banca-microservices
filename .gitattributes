@@ -1,0 +1,20 @@
+# Normaliza los finales de linea a LF dentro del repo
+# (se checkea la linea apropiada del SO en cada clone)
+* text=auto
+
+# Archivos que siempre deben ser LF
+*.java   text eol=lf
+*.xml    text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+*.json   text eol=lf
+*.md     text eol=lf
+*.sh     text eol=lf
+Dockerfile text eol=lf
+.dockerignore text eol=lf
+
+# Binarios: nunca se tocan
+*.jar    binary
+*.class  binary
+*.png    binary
+*.jpg    binary

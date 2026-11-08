@@ -1,0 +1,26 @@
+# Artefactos de build
+target/
+
+# Archivos de build y metadatos de Maven que no hacen falta en la imagen
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/
+
+# IDE y sistema
+.idea/
+*.iml
+.vscode/
+.settings/
+.DS_Store
+Thumbs.db
+
+# Documentación y Docker (el Dockerfile está en el contexto pero no se copia al build)
+README.md
+Dockerfile
+.dockerignore
+*.log

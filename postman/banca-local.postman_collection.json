@@ -1,0 +1,1219 @@
+{
+  "info": {
+    "_postman_id": "f5a1b6c8-9e0d-4a27-b3f1-6e8c4d2a9b05",
+    "name": "banca local",
+    "description": "Coleccion unica de la primera entrega: dos microservicios Java 21 + Spring Boot 4 en Docker comunicandose entre si por REST.\n\nSubcarpetas (el orden se respeta al importar):\n1. 00 - Integracion bidireccional\n2. 01 - cliente-service\n3. 02 - cuenta-service\n\nRequiere los contenedores levantados: `docker compose up -d`",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "00 - Integración bidireccional",
+      "description": "Recorre los DOS sentidos de la comunicacion entre contenedores. Ejecutar esta carpeta primero.",
+      "item": [
+        {
+          "name": "1. Ambos contenedores están UP",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrlCliente}}/actuator/health",
+              "host": [
+                "{{baseUrlCliente}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            },
+            "description": "Verifica que el cliente-service esté levantado antes de probar la integración."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027cliente-service UP\u0027, function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().status).to.eql(\u0027UP\u0027);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. cuenta-service UP",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrlCuenta}}/actuator/health",
+              "host": [
+                "{{baseUrlCuenta}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027cuenta-service UP\u0027, function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().status).to.eql(\u0027UP\u0027);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Sentido A: cliente-service llama a cuenta-service",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrlCliente}}/api/clientes/1/cuentas",
+              "host": [
+                "{{baseUrlCliente}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                "1",
+                "cuentas"
+              ]
+            },
+            "description": "El cliente-service llama por HTTP a `http://cuenta-service:8082/api/cuentas/cliente/1` y compone la respuesta con sus datos locales.\n\nVerifica la petición cruzada con:\n`docker compose logs cliente-service`"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027Respuesta compuesta 200\u0027, function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\u0027cliente local + cuentas remotas\u0027, function () {",
+                  "    var body = pm.response.json();",
+                  "    pm.expect(body.cliente.id).to.eql(1);",
+                  "    pm.expect(body.cliente.nombre).to.be.a(\u0027string\u0027);",
+                  "    pm.expect(body.cuentas.length).to.be.above(0);",
+                  "    pm.expect(body.cuentas[0]).to.have.property(\u0027numero\u0027);",
+                  "    pm.expect(body.cuentas[0]).to.have.property(\u0027saldo\u0027);",
+                  "    pm.expect(body.cuentas[0].clienteId).to.eql(1);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Sentido B: cuenta-service llama a cliente-service",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrlCuenta}}/api/cuentas/1/titular",
+              "host": [
+                "{{baseUrlCuenta}}"
+              ],
+              "path": [
+                "api",
+                "cuentas",
+                "1",
+                "titular"
+              ]
+            },
+            "description": "El cuenta-service llama por HTTP a `http://cliente-service:8081/api/clientes/1` y compone la respuesta con sus datos locales.\n\nVerifica la petición cruzada con:\n`docker compose logs cuenta-service`"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027Respuesta compuesta 200\u0027, function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\u0027cuenta local + titular remoto\u0027, function () {",
+                  "    var body = pm.response.json();",
+                  "    pm.expect(body.cuenta.id).to.eql(1);",
+                  "    pm.expect(body.cuenta).to.have.property(\u0027saldo\u0027);",
+                  "    pm.expect(body.titular.id).to.eql(1);",
+                  "    pm.expect(body.titular.nombre).to.be.a(\u0027string\u0027);",
+                  "    pm.expect(body.titular.email).to.contain(\u0027@\u0027);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. El titular devuelto coincide con el cliente original",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrlCliente}}/api/clientes/1",
+              "host": [
+                "{{baseUrlCliente}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                "1"
+              ]
+            },
+            "description": "Compara el cliente consultado directamente con el titular que devolvió el cuenta-service en el paso 4: deben ser idénticos, lo que prueba que ambos contenedores ven los mismos datos."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027Cliente 200\u0027, function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\u0027Datos consistentes con el paso 4\u0027, function () {",
+                  "    var cliente = pm.response.json();",
+                  "    pm.expect(cliente.id).to.eql(1);",
+                  "    pm.expect(cliente).to.have.property(\u0027documento\u0027);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6. Endpoint expuesto por cuenta-service para cliente-service",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrlCuenta}}/api/cuentas/cliente/1",
+              "host": [
+                "{{baseUrlCuenta}}"
+              ],
+              "path": [
+                "api",
+                "cuentas",
+                "cliente",
+                "1"
+              ]
+            },
+            "description": "Este es el endpoint exacto que consume el cliente-service en el paso 3. Llámalo directamente para ver lo que recibe por la red interna de Docker."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027Lista 200\u0027, function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\u0027Cuentas del cliente 1\u0027, function () {",
+                  "    var body = pm.response.json();",
+                  "    pm.expect(body.length).to.be.above(0);",
+                  "    body.forEach(function (c) {",
+                  "        pm.expect(c.clienteId).to.eql(1);",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7. Endpoint expuesto por cliente-service para cuenta-service",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrlCliente}}/api/clientes/1",
+              "host": [
+                "{{baseUrlCliente}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                "1"
+              ]
+            },
+            "description": "Este es el endpoint exacto que consume el cuenta-service en el paso 4. Llámalo directamente para ver lo que recibe por la red interna de Docker."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027Cliente 200\u0027, function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\u0027Tiene todos los campos\u0027, function () {",
+                  "    var body = pm.response.json();",
+                  "    pm.expect(body).to.have.property(\u0027id\u0027);",
+                  "    pm.expect(body).to.have.property(\u0027nombre\u0027);",
+                  "    pm.expect(body).to.have.property(\u0027email\u0027);",
+                  "    pm.expect(body).to.have.property(\u0027documento\u0027);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 - cliente-service (puerto 8081)",
+      "description": "CRUD del cliente-service y su endpoint de integracion ``GET /api/clientes/{id}/cuentas``, que consume al cuenta-service.",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrlCliente}}/actuator/health",
+              "host": [
+                "{{baseUrlCliente}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            },
+            "description": "Estado del contenedor. Es el endpoint que usa el healthcheck de Docker."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027Estado UP\u0027, function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().status).to.eql(\u0027UP\u0027);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar clientes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrlCliente}}/api/clientes",
+              "host": [
+                "{{baseUrlCliente}}"
+              ],
+              "path": [
+                "api",
+                "clientes"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027Lista 200\u0027, function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\u0027Devuelve al menos un cliente\u0027, function () {",
+                  "    var body = pm.response.json();",
+                  "    pm.expect(body.length).to.be.above(0);",
+                  "    pm.expect(body[0]).to.have.property(\u0027nombre\u0027);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Obtener cliente por id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrlCliente}}/api/clientes/{{clienteId}}",
+              "host": [
+                "{{baseUrlCliente}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                "{{clienteId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027Cliente 200\u0027, function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json()).to.have.property(\u0027email\u0027);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[INTEGRACIÓN] Cuentas del cliente (consume cuenta-service)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrlCliente}}/api/clientes/{{clienteId}}/cuentas",
+              "host": [
+                "{{baseUrlCliente}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                "{{clienteId}}",
+                "cuentas"
+              ]
+            },
+            "description": "Este endpoint hace una llamada HTTP al cuenta-service (`GET /api/cuentas/cliente/{id}`) y devuelve el cliente local junto con las cuentas remotas. Mira los logs de Docker para ver la petición cruzada."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027Compuesto 200\u0027, function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\u0027Trae cliente y cuentas del otro microservicio\u0027, function () {",
+                  "    var body = pm.response.json();",
+                  "    pm.expect(body).to.have.property(\u0027cliente\u0027);",
+                  "    pm.expect(body).to.have.property(\u0027cuentas\u0027);",
+                  "    pm.expect(body.cuentas.length).to.be.above(0);",
+                  "    pm.expect(body.cuentas[0]).to.have.property(\u0027saldo\u0027);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear cliente",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Carlos Mendoza\",\n  \"email\": \"carlos.mendoza@ejemplo.com\",\n  \"documento\": \"1098123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrlCliente}}/api/clientes",
+              "host": [
+                "{{baseUrlCliente}}"
+              ],
+              "path": [
+                "api",
+                "clientes"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027Creado 201\u0027, function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test(\u0027Devuelve el id asignado\u0027, function () {",
+                  "    var body = pm.response.json();",
+                  "    pm.expect(body).to.have.property(\u0027id\u0027);",
+                  "pm.collectionVariables.set(\u0027clienteIdCreado\u0027, body.id);",
+                  "try { pm.environment.set(\u0027clienteIdCreado\u0027, body.id); } catch (e) {}",
+                  "});",
+                  "pm.test(\u0027Location apunta al recurso\u0027, function () {",
+                  "    pm.response.to.have.header(\u0027Location\u0027);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Actualizar cliente creado",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Carlos Mendoza Actualizado\",\n  \"email\": \"carlos.mendoza@ejemplo.com\",\n  \"documento\": \"1098123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrlCliente}}/api/clientes/{{clienteIdCreado}}",
+              "host": [
+                "{{baseUrlCliente}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                "{{clienteIdCreado}}"
+              ]
+            },
+            "description": "Usa el id que guardó la petición \"Crear cliente\". Ejecuta esa primero."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027Actualizado 200\u0027, function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().nombre).to.eql(\u0027Carlos Mendoza Actualizado\u0027);",
+                  "});"
+                ]
+              }
+            },
+            {
+              "script": {
+                "exec": [
+                  "// PUT/DELETE necesita un id valido. Se crea el recurso si la variable",
+                  "// esta vacia o si el id ya no existe (p. ej. tras reiniciar los contenedores).",
+                  "var base = pm.collectionVariables.get(\u0027baseUrlCliente\u0027) || pm.environment.get(\u0027baseUrlCliente\u0027);",
+                  "var id = pm.collectionVariables.get(\u0027clienteIdCreado\u0027) || pm.environment.get(\u0027clienteIdCreado\u0027);",
+                  "",
+                  "function guardar(nuevoId) {",
+                  "    if (!nuevoId) { return; }",
+                  "    pm.collectionVariables.set(\u0027clienteIdCreado\u0027, nuevoId);",
+                  "    try { pm.environment.set(\u0027clienteIdCreado\u0027, nuevoId); } catch (e) {}",
+                  "}",
+                  "",
+                  "function crear() {",
+                  "    pm.sendRequest({",
+                  "        url: base + \u0027/api/clientes\u0027,",
+                  "        method: \u0027POST\u0027,",
+                  "        header: { \u0027Content-Type\u0027: \u0027application/json\u0027 },",
+                  "        body: { mode: \u0027raw\u0027, raw: JSON.stringify({ nombre: \u0027Cliente Postman\u0027, email: \u0027postman@ejemplo.com\u0027, documento: \u0027999888777\u0027 }) }",
+                  "    }, function (err, res) {",
+                  "        if (!err \u0026\u0026 res.code === 201) { guardar(res.json().id); }",
+                  "    });",
+                  "}",
+                  "",
+                  "if (!id) {",
+                  "    crear();",
+                  "} else {",
+                  "    pm.sendRequest({ url: base + \u0027/api/clientes/\u0027 + id, method: \u0027GET\u0027 }, function (err, res) {",
+                  "        if (err || res.code !== 200) { crear(); }",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              },
+              "listen": "prerequest"
+            }
+          ]
+        },
+        {
+          "name": "Validación fallida (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"\",\n  \"email\": \"esto-no-es-un-email\",\n  \"documento\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrlCliente}}/api/clientes",
+              "host": [
+                "{{baseUrlCliente}}"
+              ],
+              "path": [
+                "api",
+                "clientes"
+              ]
+            },
+            "description": "Payload inválido: debe responder 400 con el detalle de cada campo."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027Validación 400\u0027, function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test(\u0027Reporta los campos con error\u0027, function () {",
+                  "    var body = pm.response.json();",
+                  "    pm.expect(body.detalle).to.have.property(\u0027nombre\u0027);",
+                  "    pm.expect(body.detalle).to.have.property(\u0027email\u0027);",
+                  "    pm.expect(body.detalle).to.have.property(\u0027documento\u0027);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cliente inexistente (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrlCliente}}/api/clientes/999999",
+              "host": [
+                "{{baseUrlCliente}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                "999999"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027No encontrado 404\u0027, function () {",
+                  "    pm.response.to.have.status(404);",
+                  "    pm.expect(pm.response.json().servicio).to.eql(\u0027cliente-service\u0027);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Eliminar cliente creado",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrlCliente}}/api/clientes/{{clienteIdCreado}}",
+              "host": [
+                "{{baseUrlCliente}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                "{{clienteIdCreado}}"
+              ]
+            },
+            "description": "Usa el id que guardó la petición \"Crear cliente\". Ejecútala después de crear y actualizar."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027Eliminado 204\u0027, function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});"
+                ]
+              }
+            },
+            {
+              "script": {
+                "exec": [
+                  "// PUT/DELETE necesita un id valido. Se crea el recurso si la variable",
+                  "// esta vacia o si el id ya no existe (p. ej. tras reiniciar los contenedores).",
+                  "var base = pm.collectionVariables.get(\u0027baseUrlCliente\u0027) || pm.environment.get(\u0027baseUrlCliente\u0027);",
+                  "var id = pm.collectionVariables.get(\u0027clienteIdCreado\u0027) || pm.environment.get(\u0027clienteIdCreado\u0027);",
+                  "",
+                  "function guardar(nuevoId) {",
+                  "    if (!nuevoId) { return; }",
+                  "    pm.collectionVariables.set(\u0027clienteIdCreado\u0027, nuevoId);",
+                  "    try { pm.environment.set(\u0027clienteIdCreado\u0027, nuevoId); } catch (e) {}",
+                  "}",
+                  "",
+                  "function crear() {",
+                  "    pm.sendRequest({",
+                  "        url: base + \u0027/api/clientes\u0027,",
+                  "        method: \u0027POST\u0027,",
+                  "        header: { \u0027Content-Type\u0027: \u0027application/json\u0027 },",
+                  "        body: { mode: \u0027raw\u0027, raw: JSON.stringify({ nombre: \u0027Cliente Postman\u0027, email: \u0027postman@ejemplo.com\u0027, documento: \u0027999888777\u0027 }) }",
+                  "    }, function (err, res) {",
+                  "        if (!err \u0026\u0026 res.code === 201) { guardar(res.json().id); }",
+                  "    });",
+                  "}",
+                  "",
+                  "if (!id) {",
+                  "    crear();",
+                  "} else {",
+                  "    pm.sendRequest({ url: base + \u0027/api/clientes/\u0027 + id, method: \u0027GET\u0027 }, function (err, res) {",
+                  "        if (err || res.code !== 200) { crear(); }",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              },
+              "listen": "prerequest"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 - cuenta-service (puerto 8082)",
+      "description": "CRUD del cuenta-service y su endpoint de integracion ``GET /api/cuentas/{id}/titular``, que consume al cliente-service.",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrlCuenta}}/actuator/health",
+              "host": [
+                "{{baseUrlCuenta}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            },
+            "description": "Estado del contenedor. Es el endpoint que usa el healthcheck de Docker."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027Estado UP\u0027, function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().status).to.eql(\u0027UP\u0027);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar cuentas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrlCuenta}}/api/cuentas",
+              "host": [
+                "{{baseUrlCuenta}}"
+              ],
+              "path": [
+                "api",
+                "cuentas"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027Lista 200\u0027, function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\u0027Devuelve al menos una cuenta\u0027, function () {",
+                  "    var body = pm.response.json();",
+                  "    pm.expect(body.length).to.be.above(0);",
+                  "    pm.expect(body[0]).to.have.property(\u0027saldo\u0027);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Obtener cuenta por id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrlCuenta}}/api/cuentas/{{cuentaId}}",
+              "host": [
+                "{{baseUrlCuenta}}"
+              ],
+              "path": [
+                "api",
+                "cuentas",
+                "{{cuentaId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027Cuenta 200\u0027, function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json()).to.have.property(\u0027clienteId\u0027);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cuentas por cliente",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrlCuenta}}/api/cuentas/cliente/{{clienteIdTitular}}",
+              "host": [
+                "{{baseUrlCuenta}}"
+              ],
+              "path": [
+                "api",
+                "cuentas",
+                "cliente",
+                "{{clienteIdTitular}}"
+              ]
+            },
+            "description": "Endpoint consumido por el cliente-service. Devuelve las cuentas de un titular."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027Lista 200\u0027, function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\u0027Todas pertenecen al titular consultado\u0027, function () {",
+                  "    var esperado = Number(pm.collectionVariables.get(\u0027clienteIdTitular\u0027));",
+                  "    var body = pm.response.json();",
+                  "    pm.expect(body.length).to.be.above(0);",
+                  "    body.forEach(function (c) {",
+                  "        pm.expect(c.clienteId).to.eql(esperado);",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[INTEGRACIÓN] Titular de la cuenta (consume cliente-service)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrlCuenta}}/api/cuentas/{{cuentaId}}/titular",
+              "host": [
+                "{{baseUrlCuenta}}"
+              ],
+              "path": [
+                "api",
+                "cuentas",
+                "{{cuentaId}}",
+                "titular"
+              ]
+            },
+            "description": "Este endpoint hace una llamada HTTP al cliente-service (`GET /api/clientes/{id}`) y devuelve la cuenta local junto con el titular remoto. Mira los logs de Docker para ver la petición cruzada."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027Compuesto 200\u0027, function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\u0027Trae la cuenta y el titular del otro microservicio\u0027, function () {",
+                  "    var body = pm.response.json();",
+                  "    pm.expect(body).to.have.property(\u0027cuenta\u0027);",
+                  "    pm.expect(body).to.have.property(\u0027titular\u0027);",
+                  "    pm.expect(body.titular).to.have.property(\u0027nombre\u0027);",
+                  "    pm.expect(body.titular).to.have.property(\u0027email\u0027);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear cuenta",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numero\": \"4750555000\",\n  \"tipo\": \"AHORRO\",\n  \"saldo\": 2500000.00,\n  \"clienteId\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrlCuenta}}/api/cuentas",
+              "host": [
+                "{{baseUrlCuenta}}"
+              ],
+              "path": [
+                "api",
+                "cuentas"
+              ]
+            },
+            "description": "El tipo debe ser AHORRO, CORRIENTE o DEPOSITO."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027Creada 201\u0027, function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test(\u0027Devuelve el id asignado\u0027, function () {",
+                  "    var body = pm.response.json();",
+                  "    pm.expect(body).to.have.property(\u0027id\u0027);",
+                  "pm.collectionVariables.set(\u0027cuentaIdCreada\u0027, body.id);",
+                  "try { pm.environment.set(\u0027cuentaIdCreada\u0027, body.id); } catch (e) {}",
+                  "});",
+                  "pm.test(\u0027Location apunta al recurso\u0027, function () {",
+                  "    pm.response.to.have.header(\u0027Location\u0027);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Actualizar cuenta creada",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numero\": \"4750555000\",\n  \"tipo\": \"CORRIENTE\",\n  \"saldo\": 3000000.00,\n  \"clienteId\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrlCuenta}}/api/cuentas/{{cuentaIdCreada}}",
+              "host": [
+                "{{baseUrlCuenta}}"
+              ],
+              "path": [
+                "api",
+                "cuentas",
+                "{{cuentaIdCreada}}"
+              ]
+            },
+            "description": "Usa el id que guardó la petición \"Crear cuenta\". Ejecuta esa primero."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027Actualizada 200\u0027, function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().tipo).to.eql(\u0027CORRIENTE\u0027);",
+                  "});"
+                ]
+              }
+            },
+            {
+              "script": {
+                "exec": [
+                  "// PUT/DELETE necesita un id valido. Se crea el recurso si la variable",
+                  "// esta vacia o si el id ya no existe (p. ej. tras reiniciar los contenedores).",
+                  "var base = pm.collectionVariables.get(\u0027baseUrlCuenta\u0027) || pm.environment.get(\u0027baseUrlCuenta\u0027);",
+                  "var id = pm.collectionVariables.get(\u0027cuentaIdCreada\u0027) || pm.environment.get(\u0027cuentaIdCreada\u0027);",
+                  "",
+                  "function guardar(nuevoId) {",
+                  "    if (!nuevoId) { return; }",
+                  "    pm.collectionVariables.set(\u0027cuentaIdCreada\u0027, nuevoId);",
+                  "    try { pm.environment.set(\u0027cuentaIdCreada\u0027, nuevoId); } catch (e) {}",
+                  "}",
+                  "",
+                  "function crear() {",
+                  "    pm.sendRequest({",
+                  "        url: base + \u0027/api/cuentas\u0027,",
+                  "        method: \u0027POST\u0027,",
+                  "        header: { \u0027Content-Type\u0027: \u0027application/json\u0027 },",
+                  "        body: { mode: \u0027raw\u0027, raw: JSON.stringify({ numero: \u00274750000009\u0027, tipo: \u0027AHORRO\u0027, saldo: 100000, clienteId: 1 }) }",
+                  "    }, function (err, res) {",
+                  "        if (!err \u0026\u0026 res.code === 201) { guardar(res.json().id); }",
+                  "    });",
+                  "}",
+                  "",
+                  "if (!id) {",
+                  "    crear();",
+                  "} else {",
+                  "    pm.sendRequest({ url: base + \u0027/api/cuentas/\u0027 + id, method: \u0027GET\u0027 }, function (err, res) {",
+                  "        if (err || res.code !== 200) { crear(); }",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              },
+              "listen": "prerequest"
+            }
+          ]
+        },
+        {
+          "name": "Validación fallida (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numero\": \"\",\n  \"tipo\": \"CRYPTO\",\n  \"saldo\": -100,\n  \"clienteId\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrlCuenta}}/api/cuentas",
+              "host": [
+                "{{baseUrlCuenta}}"
+              ],
+              "path": [
+                "api",
+                "cuentas"
+              ]
+            },
+            "description": "Payload inválido: debe responder 400 con el detalle de cada campo."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027Validación 400\u0027, function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test(\u0027Reporta los campos con error\u0027, function () {",
+                  "    var body = pm.response.json();",
+                  "    pm.expect(body.detalle).to.have.property(\u0027numero\u0027);",
+                  "    pm.expect(body.detalle).to.have.property(\u0027tipo\u0027);",
+                  "    pm.expect(body.detalle).to.have.property(\u0027saldo\u0027);",
+                  "    pm.expect(body.detalle).to.have.property(\u0027clienteId\u0027);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cuenta inexistente (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrlCuenta}}/api/cuentas/999999",
+              "host": [
+                "{{baseUrlCuenta}}"
+              ],
+              "path": [
+                "api",
+                "cuentas",
+                "999999"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027No encontrado 404\u0027, function () {",
+                  "    pm.response.to.have.status(404);",
+                  "    pm.expect(pm.response.json().servicio).to.eql(\u0027cuenta-service\u0027);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Eliminar cuenta creada",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrlCuenta}}/api/cuentas/{{cuentaIdCreada}}",
+              "host": [
+                "{{baseUrlCuenta}}"
+              ],
+              "path": [
+                "api",
+                "cuentas",
+                "{{cuentaIdCreada}}"
+              ]
+            },
+            "description": "Usa el id que guardó la petición \"Crear cuenta\". Ejecútala después de crear y actualizar."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\u0027Eliminada 204\u0027, function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});"
+                ]
+              }
+            },
+            {
+              "script": {
+                "exec": [
+                  "// PUT/DELETE necesita un id valido. Se crea el recurso si la variable",
+                  "// esta vacia o si el id ya no existe (p. ej. tras reiniciar los contenedores).",
+                  "var base = pm.collectionVariables.get(\u0027baseUrlCuenta\u0027) || pm.environment.get(\u0027baseUrlCuenta\u0027);",
+                  "var id = pm.collectionVariables.get(\u0027cuentaIdCreada\u0027) || pm.environment.get(\u0027cuentaIdCreada\u0027);",
+                  "",
+                  "function guardar(nuevoId) {",
+                  "    if (!nuevoId) { return; }",
+                  "    pm.collectionVariables.set(\u0027cuentaIdCreada\u0027, nuevoId);",
+                  "    try { pm.environment.set(\u0027cuentaIdCreada\u0027, nuevoId); } catch (e) {}",
+                  "}",
+                  "",
+                  "function crear() {",
+                  "    pm.sendRequest({",
+                  "        url: base + \u0027/api/cuentas\u0027,",
+                  "        method: \u0027POST\u0027,",
+                  "        header: { \u0027Content-Type\u0027: \u0027application/json\u0027 },",
+                  "        body: { mode: \u0027raw\u0027, raw: JSON.stringify({ numero: \u00274750000009\u0027, tipo: \u0027AHORRO\u0027, saldo: 100000, clienteId: 1 }) }",
+                  "    }, function (err, res) {",
+                  "        if (!err \u0026\u0026 res.code === 201) { guardar(res.json().id); }",
+                  "    });",
+                  "}",
+                  "",
+                  "if (!id) {",
+                  "    crear();",
+                  "} else {",
+                  "    pm.sendRequest({ url: base + \u0027/api/cuentas/\u0027 + id, method: \u0027GET\u0027 }, function (err, res) {",
+                  "        if (err || res.code !== 200) { crear(); }",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              },
+              "listen": "prerequest"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrlCliente",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "baseUrlCuenta",
+      "value": "http://localhost:8082"
+    },
+    {
+      "key": "clienteId",
+      "value": "1"
+    },
+    {
+      "key": "cuentaId",
+      "value": "1"
+    },
+    {
+      "key": "clienteIdTitular",
+      "value": "1"
+    },
+    {
+      "key": "clienteIdCreado",
+      "value": ""
+    },
+    {
+      "key": "cuentaIdCreada",
+      "value": ""
+    }
+  ]
+}

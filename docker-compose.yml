@@ -1,0 +1,54 @@
+name: banca-microservices
+
+services:
+  cliente-service:
+    build:
+      context: ./cliente-service
+      dockerfile: Dockerfile
+    image: banca/cliente-service:1.0.0
+    container_name: cliente-service
+    ports:
+      - "8081:8081"
+    environment:
+      # URL del otro microservicio, resuelta por el nombre del servicio en la red de Docker.
+      SERVICIO_CUENTAS_BASE_URL: http://cuenta-service:8082
+      SERVICIO_CUENTAS_TIMEOUT_MS: 3000
+      SERVICIO_NOMBRE: cliente-service
+    depends_on:
+      cuenta-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    networks:
+      - banca
+    restart: unless-stopped
+
+  cuenta-service:
+    build:
+      context: ./cuenta-service
+      dockerfile: Dockerfile
+    image: banca/cuenta-service:1.0.0
+    container_name: cuenta-service
+    ports:
+      - "8082:8082"
+    environment:
+      SERVICIO_CLIENTES_BASE_URL: http://cliente-service:8081
+      SERVICIO_CLIENTES_TIMEOUT_MS: 3000
+      SERVICIO_NOMBRE: cuenta-service
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8082/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    networks:
+      - banca
+    restart: unless-stopped
+
+networks:
+  banca:
+    driver: bridge
