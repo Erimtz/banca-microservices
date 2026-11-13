@@ -1,0 +1,38 @@
+# Jenkins (Entrega 2) — se levanta aparte del compose principal para no
+# afectar los dos contenedores de la Entrega 1:
+#
+#   docker compose -f jenkins/docker-compose.yml up -d --build
+#
+name: jenkins
+
+services:
+  jenkins:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: banca/jenkins:lts
+    container_name: jenkins
+    ports:
+      - "8080:8080"     # UI y login
+      - "50000:50000"   # agentes JNLP (no se usan, se expone por convención)
+    volumes:
+      # Volumen recomendado por el enunciado: conserva plugins, credenciales
+      # y jobs entre reinicios del contenedor.
+      - jenkins_home:/var/jenkins_home
+      # Acceso al motor de Docker (DooD): el pipeline construye las imágenes
+      # de la Entrega 1 con el mismo motor que usa el host.
+      - /var/run/docker.sock:/var/run/docker.sock
+    # El socket del motor pertenece a root:root (660). En lugar de correr como
+    # root, se agrega el grupo 0 como suplementario del usuario jenkins (1000).
+    group_add:
+      - "0"
+    environment:
+      # Recursos de la JVM (máquina local con poca RAM asignada a Docker).
+      # El asistente de instalación queda ACTIVADO: su primera pantalla
+      # (instalación de plugins y creación del usuario admin) es evidencia
+      # de la instalación para el documento de la Entrega 2.
+      JAVA_OPTS: "-Xmx512m"
+    restart: unless-stopped
+
+volumes:
+  jenkins_home:

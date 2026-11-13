@@ -1,34 +1,16 @@
-# Entrega 1 — Microservicios con Spring Boot 4, Java 21 y Docker
+# banca-microservices
 
-[![CI](https://github.com/Erimtz/banca-microservices/actions/workflows/ci.yml/badge.svg)](https://github.com/Erimtz/banca-microservices/actions/workflows/ci.yml)
-[![Repositorio](https://img.shields.io/badge/GitHub-Erimtz%2Fbanca--microservices-blue)](https://github.com/Erimtz/banca-microservices)
+Aplicación de banca de ejemplo compuesta por **dos microservicios** construidos con
+**Java 21**, **Spring Boot 4.1.2** y **Docker**, que se comunican entre sí de forma
+síncrona por REST dentro de una red de Docker.
 
-Proyecto de dos microservicios construidos con **Java 21**, **Spring Boot 4.1.2** y
-**Docker**, desplegados como **dos contenedores** que se comunican entre sí de forma
-síncrona por REST.
-
-> 📄 **Evidencias paso a paso** (levantamiento, curl de ida y vuelta, persistencia,
-> CI, conclusiones y referencias): [`docs/entrega-1.md`](docs/entrega-1.md)
+- `cliente-service` (puerto **8081**): gestión de clientes bancarios.
+- `cuenta-service` (puerto **8082**): gestión de cuentas bancarias (H2 con persistencia
+  en volumen Docker).
 
 ---
 
-## 1. Stack tecnológico
-
-| Componente | Versión |
-|---|---|
-| Java | 21 (Temurin LTS) |
-| Spring Boot | 4.1.2 |
-| Spring Framework | 7.x (incluido en Boot 4) |
-| Maven | 3.9.x |
-| Docker / Docker Compose | 28.x / v2.34 |
-| Imagen base runtime | `eclipse-temurin:21-jre` |
-| Persistencia (`cuenta-service`) | Spring Data JPA + H2 en modo archivo (volumen `cuenta-data`) |
-
-> Spring Boot 4 exige Java 17 o superior; se usa Java 21, la LTS recomendada.
-
----
-
-## 2. Arquitectura
+## Arquitectura
 
 ```
                  ┌──────────────────────────────────────────────┐
@@ -43,132 +25,70 @@ síncrona por REST.
                  │            │ HTTP (RestClient)               │
                  │            │ GET /api/clientes/{id}          │
                  │            ▼                                 │
-                 │   ┌──────────────────┐                       │
-                 │   │  cuenta-service  │                       │
-                 │   │   puerto 8082    │                       │
-                 │   └──────────────────┘                       │
+                 │   ┌──────────────────┐    ┌───────────────┐  │
+                 │   │  cuenta-service  │    │ volumen       │  │
+                 │   │   puerto 8082    │───►│ cuenta-data   │  │
+                 │   └──────────────────┘    └───────────────┘  │
                  └──────────────────────────────────────────────┘
 ```
 
-La comunicación es **bidireccional**:
+La comunicación es **bidireccional**: cada microservicio expone un endpoint propio que
+consume al otro **por el nombre del servicio dentro de la red de Docker**
+(`http://cuenta-service:8082` y `http://cliente-service:8081`), no por `localhost`:
 
 | Sentido | Endpoint propio | Endpoint consumido | Cliente HTTP |
 |---|---|---|---|
 | `cliente-service` → `cuenta-service` | `GET /api/clientes/{id}/cuentas` | `GET /api/cuentas/cliente/{clienteId}` | `CuentasClient` |
 | `cuenta-service` → `cliente-service` | `GET /api/cuentas/{id}/titular` | `GET /api/clientes/{id}` | `ClientesClient` |
 
-Cada microservicio consume al otro **por el nombre del servicio dentro de la red de
-Docker** (`http://cuenta-service:8082` y `http://cliente-service:8081`), no por `localhost`.
-La URL es configurable por variable de entorno, por lo que el mismo JAR funciona fuera
-de Docker apuntando a `localhost`.
-
-Los microservicios **no comparten clases**: cada uno define sus propios DTOs
-(`CuentaDTO` está duplicado a propósito, igual que `TitularDTO`/`ClienteDTO`). Es el
-comportamiento esperado en un sistema desacoplado.
-
-**Persistencia:** `cuenta-service` guarda en **H2 en modo archivo** dentro de
-`/app/data`, cubierto por el volumen Docker `cuenta-data` (los datos sobreviven a
-`restart` y `docker compose down`); `cliente-service` mantiene sus datos en memoria,
-sembrados en cada arranque. H2 corre **embebido** y no expone puertos, así que el
-sistema sigue siendo exactamente dos contenedores.
+Cada servicio define sus propios DTOs (no comparten clases): es el comportamiento
+esperado en un sistema desacoplado.
 
 ---
 
-## 3. Estructura del proyecto
+## Requisitos
 
-```
-repository/
-├── docker-compose.yml          # Levanta los dos contenedores en la misma red + volumen
-├── .env.example                # Variables de entorno documentadas (sin valores reales)
-├── .github/workflows/ci.yml    # CI: tests + build de imágenes + prueba de ida y vuelta
-├── docs/entrega-1.md           # Evidencias paso a paso de la entrega
-├── postman/                    # Colecciones JSON para probar la API
-├── cliente-service/
-│   ├── Dockerfile              # Build multi-stage: Maven → JRE
-│   ├── pom.xml
-│   └── src/
-│       ├── main/java/co/edu/poli/banca/cliente/
-│       │   ├── ClienteApplication.java
-│       │   ├── controller/ClienteController.java
-│       │   ├── service/ClienteService.java
-│       │   ├── repository/ClienteRepository.java     # en memoria
-│       │   ├── client/CuentasClient.java             # consume a cuenta-service
-│       │   ├── config/RestClientConfig.java
-│       │   ├── dto/                                  # ClienteDTO, CuentaDTO, ...
-│       │   └── exception/                            # manejo global de errores
-│       └── test/java/...                             # 15 pruebas
-└── cuenta-service/
-    ├── Dockerfile
-    ├── pom.xml
-    └── src/
-        ├── main/java/co/edu/poli/banca/cuenta/
-        │   ├── CuentaApplication.java
-        │   ├── controller/CuentaController.java
-        │   ├── service/CuentaService.java
-        │   ├── repository/
-        │   │   ├── CuentaRepository.java             # puerto (interfaz)
-        │   │   ├── CuentaRepositoryJpa.java          # JPA + H2 (producción)
-        │   │   ├── CuentaJpaRepository.java          # Spring Data
-        │   │   ├── CuentaEntity.java                 # entidad JPA
-        │   │   └── DatosSemilla.java                 # siembra si la tabla está vacía
-        │   ├── client/ClientesClient.java            # consume a cliente-service
-        │   ├── config/RestClientConfig.java
-        │   ├── dto/
-        │   └── exception/
-        └── test/java/...                             # 16 pruebas
-```
-
-`cuenta-service` persiste con **Spring Data JPA + H2 en modo archivo** en `/app/data`
-(volumen `cuenta-data`), de modo que los datos sobreviven a reinicios.
-`cliente-service` mantiene sus datos en un `ConcurrentHashMap` con información
-sembrada al arrancar. El sistema se mantiene en **exactamente dos contenedores**.
+- Docker Desktop con `docker compose` v2
+- Java 21 + Maven 3.9 (solo si se quiere correr sin Docker)
 
 ---
 
-## 4. Cómo ejecutarlo
-
-### 4.1 Con Docker (recomendado)
+## Cómo ejecutarlo
 
 ```bash
-# Opcional: copiar las variables de entorno (docker compose ya usa
-# los valores por defecto definidos en docker-compose.yml)
-cp .env.example .env
-
-docker compose up --build
+git clone https://github.com/Erimtz/banca-microservices.git
+cd banca-microservices
+docker compose up -d --build
+docker compose ps        # los dos contenedores deben quedar "healthy"
 ```
 
-O en segundo plano:
+Las variables de entorno son opcionales: `docker-compose.yml` trae valores por defecto
+(`${VAR:-default}`). Para sobrescribirlos:
 
 ```bash
-docker compose up --build -d
-docker compose ps          # los dos contenedores deben quedar "healthy"
+cp .env.example .env     # editar los valores deseados
+docker compose up -d
 ```
 
 Detener:
 
 ```bash
-docker compose down
+docker compose down          # conserva los datos de cuenta-service
+docker compose down -v       # borra también el volumen de datos
 ```
 
-### 4.2 Sin Docker (desarrollo local)
-
-Terminal 1:
+### Sin Docker (desarrollo local)
 
 ```bash
-cd cuenta-service
-mvn spring-boot:run        # escucha en :8082
-```
-
-Terminal 2:
-
-```bash
-cd cliente-service
-mvn spring-boot:run        # escucha en :8081
+# Terminal 1
+cd cuenta-service && mvn spring-boot:run     # :8082
+# Terminal 2
+cd cliente-service && mvn spring-boot:run    # :8081
 ```
 
 ---
 
-## 5. Endpoints
+## Endpoints
 
 ### cliente-service — `http://localhost:8081`
 
@@ -179,8 +99,8 @@ mvn spring-boot:run        # escucha en :8081
 | `POST` | `/api/clientes` | Crea un cliente (validado) |
 | `PUT` | `/api/clientes/{id}` | Actualiza un cliente (validado) |
 | `DELETE` | `/api/clientes/{id}` | Elimina un cliente |
-| `GET` | `/api/clientes/{id}/cuentas` | **Consume al `cuenta-service`** |
-| `GET` | `/actuator/health` | Health check usado por Docker |
+| `GET` | `/api/clientes/{id}/cuentas` | Cliente con sus cuentas (**consume al `cuenta-service`**) |
+| `GET` | `/actuator/health` | Health check |
 
 ### cuenta-service — `http://localhost:8082`
 
@@ -191,116 +111,93 @@ mvn spring-boot:run        # escucha en :8081
 | `POST` | `/api/cuentas` | Crea una cuenta (validada) |
 | `PUT` | `/api/cuentas/{id}` | Actualiza una cuenta (validada) |
 | `DELETE` | `/api/cuentas/{id}` | Elimina una cuenta |
-| `GET` | `/api/cuentas/cliente/{clienteId}` | Cuentas de un cliente (lo consume `cliente-service`) |
-| `GET` | `/api/cuentas/{id}/titular` | **Consume al `cliente-service`** |
-| `GET` | `/actuator/health` | Health check usado por Docker |
+| `GET` | `/api/cuentas/cliente/{clienteId}` | Cuentas de un titular (lo consume `cliente-service`) |
+| `GET` | `/api/cuentas/{id}/titular` | Cuenta con su titular (**consume al `cliente-service`**) |
+| `GET` | `/actuator/health` | Health check |
 
 ---
 
-## 6. Verificando la comunicación entre contenedores
-
-Con `docker compose up` corriendo:
+## Ejemplo de uso (ida y vuelta)
 
 ```bash
-# 1. cliente-service llama a cuenta-service y devuelve el cliente + sus cuentas
-curl http://localhost:8081/api/clientes/1/cuentas
+# 1. Guardar un cliente
+curl -s -X POST http://localhost:8081/api/clientes \
+  -H "Content-Type: application/json" \
+  -d '{"nombre":"Ana Gómez","email":"ana@ejemplo.com","documento":"1023456789"}'
+# -> 201 {"id":4,...}
 
-# 2. cuenta-service llama a cliente-service y devuelve la cuenta + su titular
-curl http://localhost:8082/api/cuentas/1/titular
+# 2. Guardar una cuenta de ese cliente
+curl -s -X POST http://localhost:8082/api/cuentas \
+  -H "Content-Type: application/json" \
+  -d '{"numero":"4750123123","tipo":"AHORRO","saldo":987654.32,"clienteId":4}'
+# -> 201 {"id":5,...}
 
-# 3. Ver los logs cruzados: se ve la petición HTTP saliendo de cada contenedor
-docker compose logs -f
-```
+# 3. Leer la cuenta con su titular (cuenta-service llama al cliente-service)
+curl -s http://localhost:8082/api/cuentas/5/titular
+# -> 200 {"cuenta":{...},"titular":{"nombre":"Ana Gómez",...}}
 
-Respuesta esperada del primer comando:
-
-```json
-{
-  "cliente": {
-    "id": 1,
-    "nombre": "Ana Gómez",
-    "email": "ana.gomez@ejemplo.com",
-    "documento": "1023456789"
-  },
-  "cuentas": [
-    { "id": 1, "numero": "4750123456", "tipo": "AHORRO", "saldo": 1500000.00, "clienteId": 1 },
-    { "id": 2, "numero": "4750654321", "tipo": "CORRIENTE", "saldo": 320000.50, "clienteId": 1 }
-  ]
-}
-```
-
-Confirmando que la llamada cruzada funciona:
-
-```bash
-docker compose exec cliente-service curl -s http://cuenta-service:8082/actuator/health
-docker compose exec cuenta-service  curl -s http://cliente-service:8081/actuator/health
+# 4. Leer el cliente con sus cuentas (cliente-service llama al cuenta-service)
+curl -s http://localhost:8081/api/clientes/4/cuentas
+# -> 200 {"cliente":{...},"cuentas":[{...}]}
 ```
 
 ---
 
-## 7. Pruebas con Postman
+## Datos
 
-La carpeta [`postman/`](postman/) contiene **una sola colección** con subcarpetas, de
-modo que al importarlas el orden queda fijo y no se mezcla con tus demás colecciones:
-
-```
-banca local
-├── 00 - Integración bidireccional        7 peticiones
-├── 01 - cliente-service (puerto 8081)    9 peticiones
-└── 02 - cuenta-service (puerto 8082)    10 peticiones
-```
-
-| Archivo | Contenido |
+| Servicio | Persistencia |
 |---|---|
-| `postman/banca-local.postman_collection.json` | Colección única: 26 peticiones con aserciones |
-| `postman/banca-local.postman_environment.json` | Variables `baseUrlCliente`, `baseUrlCuenta` y los ids |
+| `cliente-service` | En memoria (`ConcurrentHashMap`), sembrado con 3 clientes en cada arranque |
+| `cuenta-service` | **H2 en modo archivo** en `/app/data`, respaldado por el volumen `cuenta-data`: los datos sobreviven a reinicios; se siembra con 4 cuentas solo si la tabla está vacía |
 
-Todas las peticiones incluyen **aserciones** en su test script (código HTTP, campos de
-la respuesta y guardado automático del id creado para encadenar `POST → PUT → DELETE`).
-Las variables viven en la colección, así que funciona incluso sin importar el entorno.
-Además, `PUT` y `DELETE` incluyen un **pre-request script** que crea el recurso si el id
-está vacío o ya no existe (p. ej. tras reiniciar los contenedores), por lo que esas
-peticiones funcionan en cualquier orden.
-
-```bash
-docker compose up -d          # levantar antes de importar
-```
-
-Luego en Postman: **Import → Files** → seleccionar los `.json` y elegir el entorno
-**Banca - Local**. Detalles y orden de ejecución en [`postman/README.md`](postman/README.md).
+Ambos servicios validan los payloads con Bean Validation y devuelven errores
+consistentes (`400` con detalle por campo, `404`, `503` si el servicio remoto no
+responde).
 
 ---
 
-## 8. Pruebas
+## Pruebas
 
 ```bash
 cd cliente-service && mvn test     # 15 pruebas
 cd cuenta-service  && mvn test     # 16 pruebas
 ```
 
-La suite cubre tres niveles por servicio:
+La suite cubre casos de uso (Mockito), controladores (`@WebMvcTest` + `MockMvc`) y el
+contrato HTTP que cada servicio espera del otro (`MockRestServiceServer`).
 
-- **Servicio** (`@Test` + Mockito): casos de uso, CRUD y propagación de errores.
-- **Controlador** (`@WebMvcTest` + `MockMvc`): rutas, códigos HTTP, validación y
-  manejo de errores globales.
-- **Cliente HTTP** (`MockRestServiceServer`): verifica el **contrato exacto** que cada
-  servicio espera del otro, sin levantar el microservicio remoto.
+Para probar la API desde la interfaz: importar la colección de
+[`postman/`](postman/README.md) en Postman (26 peticiones con aserciones) y elegir el
+entorno **Banca - Local**.
 
 ---
 
-## 9. Notas de implementación (Spring Boot 4)
+## Estructura
 
-Tres detalles que cambiaron respecto a Spring Boot 3 y son relevantes para esta entrega:
+```
+repository/
+├── docker-compose.yml          # Los dos contenedores, red y volumen cuenta-data
+├── .env.example                # Variables de entorno documentadas
+├── postman/                    # Colección Postman con aserciones
+├── cliente-service/
+│   ├── Dockerfile              # Build multi-stage: Maven → JRE
+│   ├── pom.xml
+│   └── src/main/java/...       # controller / service / repository / client / dto / exception
+└── cuenta-service/
+    ├── Dockerfile
+    ├── pom.xml
+    └── src/main/java/...       # incluye repository con JPA + H2
+```
 
-1. **`@WebMvcTest` requiere un starter propio.** Los tests por capa se
-   modularizaron: hace falta `spring-boot-starter-webmvc-test` además de
-   `spring-boot-starter-test`.
-2. **Los timeouts del cliente HTTP** se configuran con
-   `HttpClientSettings` (`org.springframework.boot.http.client`), no con
-   `connectTimeout()`/`readTimeout()` sobre el builder.
-3. **`@MockBean` fue eliminado**; se usa `@MockitoBean`
-   (`org.springframework.test.context.bean.override.mockito.MockitoBean`).
+---
 
-Los timeouts están en 3 segundos (`servicio.*.timeout-ms`) y, si el servicio remoto
-no responde o devuelve un 5xx, la API responde `503 Service Unavailable` con un
-`ErrorDTO` en lugar de propagar el error crudo.
+## Stack
+
+| Componente | Versión |
+|---|---|
+| Java | 21 (Temurin LTS) |
+| Spring Boot | 4.1.2 (Spring Framework 7) |
+| Maven | 3.9.x |
+| Persistencia (`cuenta-service`) | Spring Data JPA + H2 (modo archivo) |
+| Docker / Docker Compose | 28.x / v2.34 |
+| Imagen base runtime | `eclipse-temurin:21-jre` |
