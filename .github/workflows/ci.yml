@@ -72,7 +72,7 @@ jobs:
           echo "CLIENTE_ID=$CID" >> "$GITHUB_ENV"
           echo "CUENTA_ID=$AID" >> "$GITHUB_ENV"
 
-      - name: Leer: cuenta-service llama al cliente-service (ida y vuelta)
+      - name: "Leer: cuenta-service llama al cliente-service (ida y vuelta)"
         run: |
           set -euo pipefail
           RESP=$(curl -fsS "http://localhost:8082/api/cuentas/${CUENTA_ID}/titular")
@@ -80,7 +80,7 @@ jobs:
           echo "$RESP" | jq -e ".cuenta.id == $CUENTA_ID"
           echo "$RESP" | jq -e ".titular.nombre == \"CI Roundtrip\""
 
-      - name: Leer: cliente-service llama al cuenta-service (ida y vuelta)
+      - name: "Leer: cliente-service llama al cuenta-service (ida y vuelta)"
         run: |
           set -euo pipefail
           RESP=$(curl -fsS "http://localhost:8081/api/clientes/${CLIENTE_ID}/cuentas")
