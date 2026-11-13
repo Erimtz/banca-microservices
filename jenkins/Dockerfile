@@ -20,10 +20,14 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends git curl jq ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# --- CLI de Docker + Compose (se copian de la imagen oficial docker:cli) -----
+# --- CLI de Docker + Compose + BuildKit (de la imagen oficial docker:cli) ----
+# buildx es imprescindible: los Dockerfiles de los servicios usan
+# RUN --mount=type=cache (sintaxis BuildKit) que el builder clasico rechaza.
 COPY --from=docker:cli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=docker:cli /usr/local/libexec/docker/cli-plugins/docker-compose \
                        /usr/local/lib/docker/cli-plugins/docker-compose
+COPY --from=docker:cli /usr/local/libexec/docker/cli-plugins/docker-buildx \
+                       /usr/local/lib/docker/cli-plugins/docker-buildx
 
 # --- Maven 3.9 (misma imagen/version que el build stage de los servicios) ----
 COPY --from=maven:3.9-eclipse-temurin-21 /usr/share/maven /usr/share/maven
