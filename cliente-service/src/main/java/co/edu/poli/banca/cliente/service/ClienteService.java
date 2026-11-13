@@ -25,9 +25,7 @@ public class ClienteService {
     }
 
     public List<ClienteDTO> listar() {
-        return repositorio.findAll().stream()
-                .filter(cliente -> cliente.id() != null && cliente.id() > 3)
-                .toList();
+        return repositorio.findAll();
     }
 
     public ClienteDTO obtener(Long id) {
