@@ -1,8 +1,14 @@
 # Entrega 1 — Microservicios con Spring Boot 4, Java 21 y Docker
 
+[![CI](https://github.com/Erimtz/banca-microservices/actions/workflows/ci.yml/badge.svg)](https://github.com/Erimtz/banca-microservices/actions/workflows/ci.yml)
+[![Repositorio](https://img.shields.io/badge/GitHub-Erimtz%2Fbanca--microservices-blue)](https://github.com/Erimtz/banca-microservices)
+
 Proyecto de dos microservicios construidos con **Java 21**, **Spring Boot 4.1.2** y
 **Docker**, desplegados como **dos contenedores** que se comunican entre sí de forma
 síncrona por REST.
+
+> 📄 **Evidencias paso a paso** (levantamiento, curl de ida y vuelta, persistencia,
+> CI, conclusiones y referencias): [`docs/entrega-1.md`](docs/entrega-1.md)
 
 ---
 
@@ -16,6 +22,7 @@ síncrona por REST.
 | Maven | 3.9.x |
 | Docker / Docker Compose | 28.x / v2.34 |
 | Imagen base runtime | `eclipse-temurin:21-jre` |
+| Persistencia (`cuenta-service`) | Spring Data JPA + H2 en modo archivo (volumen `cuenta-data`) |
 
 > Spring Boot 4 exige Java 17 o superior; se usa Java 21, la LTS recomendada.
 
@@ -59,13 +66,22 @@ Los microservicios **no comparten clases**: cada uno define sus propios DTOs
 (`CuentaDTO` está duplicado a propósito, igual que `TitularDTO`/`ClienteDTO`). Es el
 comportamiento esperado en un sistema desacoplado.
 
+**Persistencia:** `cuenta-service` guarda en **H2 en modo archivo** dentro de
+`/app/data`, cubierto por el volumen Docker `cuenta-data` (los datos sobreviven a
+`restart` y `docker compose down`); `cliente-service` mantiene sus datos en memoria,
+sembrados en cada arranque. H2 corre **embebido** y no expone puertos, así que el
+sistema sigue siendo exactamente dos contenedores.
+
 ---
 
 ## 3. Estructura del proyecto
 
 ```
 repository/
-├── docker-compose.yml          # Levanta los dos contenedores en la misma red
+├── docker-compose.yml          # Levanta los dos contenedores en la misma red + volumen
+├── .env.example                # Variables de entorno documentadas (sin valores reales)
+├── .github/workflows/ci.yml    # CI: tests + build de imágenes + prueba de ida y vuelta
+├── docs/entrega-1.md           # Evidencias paso a paso de la entrega
 ├── postman/                    # Colecciones JSON para probar la API
 ├── cliente-service/
 │   ├── Dockerfile              # Build multi-stage: Maven → JRE
@@ -89,7 +105,12 @@ repository/
         │   ├── CuentaApplication.java
         │   ├── controller/CuentaController.java
         │   ├── service/CuentaService.java
-        │   ├── repository/CuentaRepository.java      # en memoria
+        │   ├── repository/
+        │   │   ├── CuentaRepository.java             # puerto (interfaz)
+        │   │   ├── CuentaRepositoryJpa.java          # JPA + H2 (producción)
+        │   │   ├── CuentaJpaRepository.java          # Spring Data
+        │   │   ├── CuentaEntity.java                 # entidad JPA
+        │   │   └── DatosSemilla.java                 # siembra si la tabla está vacía
         │   ├── client/ClientesClient.java            # consume a cliente-service
         │   ├── config/RestClientConfig.java
         │   ├── dto/
@@ -97,9 +118,10 @@ repository/
         └── test/java/...                             # 16 pruebas
 ```
 
-No hay base de datos: los datos viven en un `ConcurrentHashMap` con información
-sembrada al arrancar, de modo que el sistema se mantiene en **exactamente dos
-contenedores**.
+`cuenta-service` persiste con **Spring Data JPA + H2 en modo archivo** en `/app/data`
+(volumen `cuenta-data`), de modo que los datos sobreviven a reinicios.
+`cliente-service` mantiene sus datos en un `ConcurrentHashMap` con información
+sembrada al arrancar. El sistema se mantiene en **exactamente dos contenedores**.
 
 ---
 
@@ -108,6 +130,10 @@ contenedores**.
 ### 4.1 Con Docker (recomendado)
 
 ```bash
+# Opcional: copiar las variables de entorno (docker compose ya usa
+# los valores por defecto definidos en docker-compose.yml)
+cp .env.example .env
+
 docker compose up --build
 ```
 

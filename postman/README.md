@@ -86,9 +86,11 @@ Dentro de cada subcarpeta, ejecuta las peticiones de arriba hacia abajo:
 4. `Actualizar` / `Eliminar` → usan ese id
 5. `Validación fallida` e `inexistente` → prueban los errores
 
-> **Ojo:** los datos viven en memoria, así que `DELETE` se pierde al reiniciar el
-> contenedor. Para volver al estado inicial:
-> `docker compose restart`
+> **Ojo:** `cliente-service` guarda en memoria, así que sus `DELETE` se pierden al
+> reiniciar el contenedor. `cuenta-service` **sí persiste** en el volumen
+> `cuenta-data`, por lo que sus datos sobreviven al reinicio. Para volver al estado
+> inicial de ambos: `docker compose down -v && docker compose up -d --build`
+> (⚠️ `down -v` borra también el volumen de cuentas).
 
 ## Ejecutar todo
 

@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Tests Maven (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [cliente-service, cuenta-service]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Java 21 + caché de Maven
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: mvn test
+        working-directory: ${{ matrix.service }}
+        run: mvn -B -ntp test
+
+  build-and-e2e:
+    name: Construir imágenes + prueba de ida y vuelta
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Construir imágenes y levantar los dos contenedores
+        run: docker compose up -d --build
+
+      - name: Esperar a que ambos healthchecks estén UP
+        run: |
+          for i in $(seq 1 60); do
+            h1=$(curl -fsS http://localhost:8081/actuator/health 2>/dev/null || true)
+            h2=$(curl -fsS http://localhost:8082/actuator/health 2>/dev/null || true)
+            if echo "$h1" | grep -q '"status":"UP"' && echo "$h2" | grep -q '"status":"UP"'; then
+              echo "Ambos servicios UP (intento $i)"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Los servicios no subieron a tiempo"
+          docker compose logs
+          exit 1
+
+      - name: Guardar un dato en cada contenedor
+        run: |
+          set -euo pipefail
+          # 1) Guardar un cliente en el contenedor 1
+          CLIENTE=$(curl -fsS -X POST http://localhost:8081/api/clientes \
+            -H "Content-Type: application/json" \
+            -d '{"nombre":"CI Roundtrip","email":"ci@ejemplo.com","documento":"55555555"}')
+          echo "POST /api/clientes -> $CLIENTE"
+          CID=$(echo "$CLIENTE" | jq -r .id)
+
+          # 2) Guardar una cuenta en el contenedor 2, referenciando ese cliente
+          CUENTA=$(curl -fsS -X POST http://localhost:8082/api/cuentas \
+            -H "Content-Type: application/json" \
+            -d "{\"numero\":\"4750000001\",\"tipo\":\"AHORRO\",\"saldo\":123456,\"clienteId\":$CID}")
+          echo "POST /api/cuentas -> $CUENTA"
+          AID=$(echo "$CUENTA" | jq -r .id)
+
+          echo "CLIENTE_ID=$CID" >> "$GITHUB_ENV"
+          echo "CUENTA_ID=$AID" >> "$GITHUB_ENV"
+
+      - name: Leer: cuenta-service llama al cliente-service (ida y vuelta)
+        run: |
+          set -euo pipefail
+          RESP=$(curl -fsS "http://localhost:8082/api/cuentas/${CUENTA_ID}/titular")
+          echo "GET /api/cuentas/$CUENTA_ID/titular -> $RESP"
+          echo "$RESP" | jq -e ".cuenta.id == $CUENTA_ID"
+          echo "$RESP" | jq -e ".titular.nombre == \"CI Roundtrip\""
+
+      - name: Leer: cliente-service llama al cuenta-service (ida y vuelta)
+        run: |
+          set -euo pipefail
+          RESP=$(curl -fsS "http://localhost:8081/api/clientes/${CLIENTE_ID}/cuentas")
+          echo "GET /api/clientes/$CLIENTE_ID/cuentas -> $RESP"
+          echo "$RESP" | jq -e ".cliente.id == $CLIENTE_ID"
+          echo "$RESP" | jq -e ".cuentas | length >= 1"
+
+      - name: Logs de la llamada cruzada entre contenedores
+        run: docker compose logs cliente-service cuenta-service | grep -E "CuentasClient|ClientesClient" || true
+
+      - name: El volumen conserva el dato tras reiniciar el contenedor
+        run: |
+          set -euo pipefail
+          docker compose restart cuenta-service
+          for i in $(seq 1 30); do
+            h=$(curl -fsS http://localhost:8082/actuator/health 2>/dev/null || true)
+            if echo "$h" | grep -q '"status":"UP"'; then break; fi
+            sleep 3
+          done
+          RESP=$(curl -fsS "http://localhost:8082/api/cuentas/${CUENTA_ID}")
+          echo "GET /api/cuentas/$CUENTA_ID tras restart -> $RESP"
+          echo "$RESP" | jq -e ".numero == \"4750000001\""
+
+      - name: Estado final y volúmenes
+        if: always()
+        run: |
+          docker compose ps
+          docker volume ls
+          docker compose logs --tail 50
+
+      - name: Limpiar
+        if: always()
+        run: docker compose down -v

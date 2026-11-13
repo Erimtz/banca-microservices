@@ -14,6 +14,7 @@ import co.edu.poli.banca.cuenta.dto.TitularDTO;
 import co.edu.poli.banca.cuenta.exception.RecursoNoEncontradoException;
 import co.edu.poli.banca.cuenta.exception.ServicioNoDisponibleException;
 import co.edu.poli.banca.cuenta.repository.CuentaRepository;
+import co.edu.poli.banca.cuenta.repository.CuentaRepositoryEnMemoria;
 import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,7 +28,7 @@ class CuentaServiceTest {
 
     @BeforeEach
     void setUp() {
-        repositorio = new CuentaRepository();
+        repositorio = new CuentaRepositoryEnMemoria();
         clientesClient = mock(ClientesClient.class);
         servicio = new CuentaService(repositorio, clientesClient);
     }

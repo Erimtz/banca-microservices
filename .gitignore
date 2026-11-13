@@ -32,9 +32,13 @@ logs/
 # Seguridad / archivos temporales
 .env
 .env.*
+!.env.example
 *.bak
 *.tmp
 *.swp
+
+# Base de datos local de H2 (cuenta-service fuera de Docker)
+data/
 
 # Java (fuera de target/)
 *.class

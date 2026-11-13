@@ -1,6 +1,20 @@
 spring:
   application:
     name: cuenta-service
+  datasource:
+    # H2 en modo archivo. En Docker lo sobrescribe docker-compose.yml con
+    # CUENTA_DB_URL=jdbc:h2:file:/app/data/cuentas (volumen cuenta-data).
+    # Fuera de Docker usa ./data (relativo al directorio de trabajo).
+    url: ${CUENTA_DB_URL:jdbc:h2:file:./data/cuentas}
+    driver-class-name: org.h2.Driver
+    username: ${CUENTA_DB_USER:sa}
+    password: ${CUENTA_DB_PASSWORD:}
+  jpa:
+    open-in-view: false
+    hibernate:
+      # 'update': crea el esquema en el primer arrancado y lo conserva
+      # en el archivo del volumen para los siguientes.
+      ddl-auto: update
 
 server:
   port: 8082

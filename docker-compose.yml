@@ -1,5 +1,8 @@
 name: banca-microservices
 
+# Los valores por defecto viven aquí; para cambiarlos copia .env.example a .env
+# y edítalo (docker compose lee .env automáticamente). No subas .env al repo.
+
 services:
   cliente-service:
     build:
@@ -11,9 +14,9 @@ services:
       - "8081:8081"
     environment:
       # URL del otro microservicio, resuelta por el nombre del servicio en la red de Docker.
-      SERVICIO_CUENTAS_BASE_URL: http://cuenta-service:8082
-      SERVICIO_CUENTAS_TIMEOUT_MS: 3000
-      SERVICIO_NOMBRE: cliente-service
+      SERVICIO_CUENTAS_BASE_URL: ${SERVICIO_CUENTAS_BASE_URL:-http://cuenta-service:8082}
+      SERVICIO_CUENTAS_TIMEOUT_MS: ${SERVICIO_CUENTAS_TIMEOUT_MS:-3000}
+      SERVICIO_NOMBRE: ${SERVICIO_NOMBRE_CLIENTE:-cliente-service}
     depends_on:
       cuenta-service:
         condition: service_healthy
@@ -36,9 +39,16 @@ services:
     ports:
       - "8082:8082"
     environment:
-      SERVICIO_CLIENTES_BASE_URL: http://cliente-service:8081
-      SERVICIO_CLIENTES_TIMEOUT_MS: 3000
-      SERVICIO_NOMBRE: cuenta-service
+      SERVICIO_CLIENTES_BASE_URL: ${SERVICIO_CLIENTES_BASE_URL:-http://cliente-service:8081}
+      SERVICIO_CLIENTES_TIMEOUT_MS: ${SERVICIO_CLIENTES_TIMEOUT_MS:-3000}
+      SERVICIO_NOMBRE: ${SERVICIO_NOMBRE_CUENTA:-cuenta-service}
+      # H2 en modo archivo: el archivo vive en /app/data y lo conserva el
+      # volumen cuenta-data (los datos sobreviven a restart/rebuild).
+      CUENTA_DB_URL: ${CUENTA_DB_URL:-jdbc:h2:file:/app/data/cuentas}
+      CUENTA_DB_USER: ${CUENTA_DB_USER:-sa}
+      CUENTA_DB_PASSWORD: ${CUENTA_DB_PASSWORD:-}
+    volumes:
+      - cuenta-data:/app/data
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8082/actuator/health"]
       interval: 10s
@@ -52,3 +62,7 @@ services:
 networks:
   banca:
     driver: bridge
+
+volumes:
+  # Persistencia de cuenta-service (H2: /app/data/cuentas.mv.db)
+  cuenta-data:

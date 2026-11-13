@@ -1,6 +1,9 @@
 # Artefactos de build
 target/
 
+# Base de datos local de H2 (si se corre fuera de Docker)
+data/
+
 # Archivos de build y metadatos de Maven que no hacen falta en la imagen
 pom.xml.tag
 pom.xml.releaseBackup

@@ -31,7 +31,10 @@ WORKDIR /app
 
 COPY --from=build /build/target/*.jar app.jar
 
-RUN chown -R app:app /app
+# /app/data es donde H2 guarda el archivo de la base (volumen cuenta-data).
+# Se crea y se da de permisos al usuario app antes de hacer el switch de usuario.
+RUN mkdir -p /app/data \
+    && chown -R app:app /app
 USER app
 
 EXPOSE 8082
