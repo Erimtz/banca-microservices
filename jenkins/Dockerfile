@@ -6,7 +6,8 @@
 #     que el motor de Docker Desktop: CLI 29 / Compose 5.7)
 #   - git, curl y jq                  (checkout y aserciones en el pipeline)
 #   - Plugins de Jenkins instalados como código (jenkins-plugin-cli):
-#       Git, Pipeline, Docker Pipeline, Credentials y GitHub
+#       Git, Pipeline, Docker Pipeline, Credentials, GitHub,
+#       Pipeline Stage View + Pipeline REST API (vista de etapas)
 # El volumen jenkins_home (definido en docker-compose.yml) conserva plugins,
 # credenciales y jobs entre reinicios.
 # ============================================================================
@@ -41,6 +42,8 @@ RUN jenkins-plugin-cli --plugins \
         docker-workflow \
         credentials-binding \
         timestamper \
-        junit
+        junit \
+        pipeline-stage-view \
+        pipeline-rest-api
 
 USER jenkins
